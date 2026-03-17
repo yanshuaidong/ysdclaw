@@ -10,7 +10,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+# dist/  -- 前端打包产物需要入 Git
 downloads/
 eggs/
 .eggs/
@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ===== ysdclaw 项目 =====
+.env
+logs/
+*.db
+node_modules/
+架构.txt
+腾讯云.txt
