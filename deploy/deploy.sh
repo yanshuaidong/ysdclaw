@@ -12,6 +12,12 @@ cd "$PROJECT_DIR/frontend"
 npm install
 npm run build
 
+echo "===== 2.1 部署前端到 Web 目录 ====="
+mkdir -p /var/www/ysdclaw
+rm -rf /var/www/ysdclaw/dist
+cp -r "$PROJECT_DIR/frontend/dist" /var/www/ysdclaw/dist
+chown -R nginx:nginx /var/www/ysdclaw
+
 echo "===== 3. 安装/更新 Python 依赖 ====="
 cd "$PROJECT_DIR/backend"
 pip3 install -r requirements.txt -q
