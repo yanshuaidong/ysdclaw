@@ -1,26 +1,32 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR=/home/ysdclaw
+PROJECT_DIR=/root/ysdclaw
 cd "$PROJECT_DIR"
 
 echo "===== 1. 拉取最新代码 ====="
 git pull origin main
 
-echo "===== 2. 安装/更新 Python 依赖 ====="
-cd backend
+echo "===== 2. 构建前端 ====="
+cd "$PROJECT_DIR/frontend"
+npm install
+npm run build
+
+echo "===== 3. 安装/更新 Python 依赖 ====="
+cd "$PROJECT_DIR/backend"
 pip3 install -r requirements.txt -q
 
-echo "===== 3. 初始化数据库 ====="
+echo "===== 4. 初始化数据库 ====="
 python3 init_db.py
 
-echo "===== 4. 重启后端服务 ====="
+echo "===== 5. 重启后端服务 ====="
 pkill -f "uvicorn app.main:app" || true
 sleep 1
+mkdir -p "$PROJECT_DIR/logs"
 nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$PROJECT_DIR/logs/backend.log" 2>&1 &
 echo "后端已启动，PID: $!"
 
-echo "===== 5. 更新 Nginx 配置并重载 ====="
+echo "===== 6. 更新 Nginx 配置并重载 ====="
 cp "$PROJECT_DIR/deploy/nginx.conf" /etc/nginx/conf.d/ysdclaw.conf
 nginx -t && nginx -s reload
 
