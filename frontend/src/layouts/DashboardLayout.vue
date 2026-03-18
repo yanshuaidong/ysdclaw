@@ -14,8 +14,8 @@
           <span>用户管理</span>
         </el-menu-item>
         <el-menu-item index="/products">
-          <el-icon><Goods /></el-icon>
-          <span>商品数据浏览</span>
+          <!-- <el-icon><Goods /></el-icon> -->
+          <span>🦞300etf</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
