@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { User, Goods } from '@element-plus/icons-vue'
+import { User } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
