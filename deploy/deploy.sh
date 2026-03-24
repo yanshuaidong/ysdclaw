@@ -18,6 +18,11 @@ rm -rf /var/www/ysdclaw/dist
 cp -r "$PROJECT_DIR/frontend/dist" /var/www/ysdclaw/dist
 chown -R nginx:nginx /var/www/ysdclaw
 
+echo "===== 2.2 设置 openclaw 数据目录权限 ====="
+chmod o+x /root /root/openclaw-workspace
+find /root/openclaw-workspace -type d -exec chmod o+x {} \;
+chmod -R o+r /root/openclaw-workspace
+
 echo "===== 3. 安装/更新 Python 依赖 ====="
 cd "$PROJECT_DIR/backend"
 pip3 install -r requirements.txt -q
