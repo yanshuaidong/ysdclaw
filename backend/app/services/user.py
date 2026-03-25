@@ -1,4 +1,9 @@
 from sqlalchemy.orm import Session
+
+import bcrypt as _bcrypt
+if not hasattr(_bcrypt, "__about__"):
+    _bcrypt.__about__ = type("about", (), {"__version__": _bcrypt.__version__})()
+
 from passlib.context import CryptContext
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
