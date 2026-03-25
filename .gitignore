@@ -213,3 +213,9 @@ logs/
 node_modules/
 架构.txt
 腾讯云.txt
+
+# ===== openclaw-mac-file-map 工具输出（含隐私）=====
+# 表格内容会包含文件路径/URL 映射，可能泄露内部结构信息
+openclaw-mac-file-map/table.md
+# 环境文件包含 IP/账号/密码等敏感信息
+openclaw-mac-file-map/env.env

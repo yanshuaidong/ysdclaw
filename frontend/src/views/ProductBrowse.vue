@@ -6,7 +6,7 @@
       </template>
     </el-result>
 
-    <el-empty v-else-if="!loading && reviews.length === 0" description="暂无复盘数据" />
+    <el-empty v-else-if="!loading && !accountData" description="暂无复盘数据" />
 
     <template v-else-if="!loading">
       <div class="page-header">
@@ -129,7 +129,7 @@ import {
   MarkLineComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import { listDir, fetchJson } from '../api/openclaw'
+import { fetchJson } from '../api/openclaw'
 
 echarts.use([
   LineChart,
@@ -143,87 +143,48 @@ echarts.use([
 
 const INITIAL_CAPITAL = 10000
 
-interface Review {
-  date: string
-  time: string
-  market_data: {
-    open: number | null
-    high: number | null
-    low: number | null
-    close: number
-    volume: number
-    change_pct: number
-  }
-  operation: {
-    action: string
-    quantity: number
-    price: number | null
-  }
-  account: {
-    cash: number
-    position: number
-    position_value: number
-    total_asset: number
-    unrealized_pnl: number
-    unrealized_pnl_pct: number
-  }
-  trade_plan: string
-  actual_result: string
-  good: string[]
-  improve: string[]
-  lessons: string[]
-  next_actions: string[]
-  scores: {
-    decision_quality: number
-    execution_discipline: number
-    risk_control: number
-  }
+interface AccountData {
+  available_funds: number
+  total_market_value: number
+  total_assets: number
+  positions: Record<string, { name: string; quantity: number; avg_cost: number }>
+}
+
+interface Operation {
+  type: 'buy' | 'sell'
+  stock_code: string
+  stock_name: string
+  price: number
+  quantity: number
+  total_amount: number
+  timestamp: string
 }
 
 const loading = ref(true)
 const error = ref('')
-const reviews = ref<Review[]>([])
-
-const latestReview = computed(() =>
-  reviews.value.length > 0 ? reviews.value[reviews.value.length - 1] : null
-)
+const accountData = ref<AccountData | null>(null)
+const operationsData = ref<Operation[]>([])
 
 const account = computed(() => {
-  const r = latestReview.value
-  if (!r) return { available_funds: 0, total_market_value: 0, total_assets: INITIAL_CAPITAL }
+  const a = accountData.value
+  if (!a) return { available_funds: 0, total_market_value: 0, total_assets: INITIAL_CAPITAL }
   return {
-    available_funds: r.account.cash,
-    total_market_value: r.account.position_value,
-    total_assets: r.account.total_asset,
+    available_funds: a.available_funds,
+    total_market_value: a.total_market_value,
+    total_assets: a.total_assets,
   }
 })
 
 const position = computed(() => {
-  const r = latestReview.value
-  if (!r || r.account.position === 0) {
+  const a = accountData.value
+  const p = a?.positions?.['510300']
+  if (!p || p.quantity === 0) {
     return { name: '华泰柏瑞沪深300ETF', quantity: 0, avg_cost: 0 }
   }
-  const costBasis = r.account.position_value - r.account.unrealized_pnl
-  return {
-    name: '华泰柏瑞沪深300ETF',
-    quantity: r.account.position,
-    avg_cost: costBasis / r.account.position,
-  }
+  return { name: p.name, quantity: p.quantity, avg_cost: p.avg_cost }
 })
 
-const operations = computed(() =>
-  reviews.value
-    .filter(r => r.operation.action !== 'hold' && r.operation.price != null)
-    .map(r => ({
-      type: r.operation.action,
-      stock_code: '510300',
-      stock_name: '华泰柏瑞沪深300ETF',
-      price: r.operation.price!,
-      quantity: r.operation.quantity,
-      total_amount: r.operation.price! * r.operation.quantity,
-      timestamp: `${r.date} ${r.time}`,
-    }))
-)
+const operations = computed(() => operationsData.value)
 
 const buyCount = computed(() => operations.value.filter(o => o.type === 'buy').length)
 const sellCount = computed(() => operations.value.filter(o => o.type === 'sell').length)
@@ -257,14 +218,41 @@ const chartRef = ref<HTMLElement | null>(null)
 let chartInstance: echarts.ECharts | null = null
 
 function buildChartData() {
-  const points: { time: string; value: number }[] = []
+  const ops = operationsData.value
+  if (ops.length === 0) return []
 
-  if (reviews.value.length > 0) {
-    points.push({ time: '初始', value: INITIAL_CAPITAL })
+  const points: { time: string; value: number }[] = []
+  let funds = INITIAL_CAPITAL
+  const positions: Record<string, { quantity: number; avg_cost: number }> = {}
+
+  const calcTotal = () => {
+    let mv = 0
+    for (const code in positions) mv += positions[code].quantity * positions[code].avg_cost
+    return +(funds + mv).toFixed(2)
   }
 
-  for (const r of reviews.value) {
-    points.push({ time: r.date, value: r.account.total_asset })
+  points.push({ time: '初始', value: INITIAL_CAPITAL })
+
+  for (const op of ops) {
+    if (op.type === 'buy') {
+      funds = +(funds - op.total_amount).toFixed(2)
+      if (positions[op.stock_code]) {
+        const p = positions[op.stock_code]
+        const oldTotal = p.avg_cost * p.quantity
+        p.quantity += op.quantity
+        p.avg_cost = +((oldTotal + op.total_amount) / p.quantity).toFixed(4)
+      } else {
+        positions[op.stock_code] = { quantity: op.quantity, avg_cost: op.price }
+      }
+    } else {
+      const p = positions[op.stock_code]
+      if (p) {
+        funds = +(funds + op.total_amount).toFixed(2)
+        p.quantity -= op.quantity
+        if (p.quantity <= 0) delete positions[op.stock_code]
+      }
+    }
+    points.push({ time: op.timestamp.slice(0, 10), value: calcTotal() })
   }
 
   return points
@@ -343,21 +331,18 @@ async function loadData() {
   loading.value = true
   error.value = ''
   try {
-    const files = await listDir('data/reviews')
-    const jsonFiles = files
-      .filter(f => f.type === 'file' && f.name.endsWith('.json'))
-      .sort((a, b) => a.name.localeCompare(b.name))
-
-    const results = await Promise.all(
-      jsonFiles.map(f => fetchJson<Review>(`data/reviews/${f.name}`))
-    )
-    reviews.value = results
+    const [acct, ops] = await Promise.all([
+      fetchJson<AccountData>('skills/ysd-account/account.json'),
+      fetchJson<Operation[]>('skills/ysd-account/operation.json'),
+    ])
+    accountData.value = acct
+    operationsData.value = ops
   } catch (e: any) {
     error.value = e.message || '加载数据失败'
   } finally {
     loading.value = false
     await nextTick()
-    if (!error.value && reviews.value.length > 0) {
+    if (!error.value && operationsData.value.length > 0) {
       initChart()
     }
   }

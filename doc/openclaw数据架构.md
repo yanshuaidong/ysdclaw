@@ -5,9 +5,12 @@
 ```
 Mac Mini (OpenClaw Agent)
   └─ ~/.openclaw/workspace/
-       ├── data/reviews/YYYY-MM-DD.json   ← 每日复盘数据
+       ├── skills/ysd-account/
+       │     ├── account.json              ← 账户实时状态
+       │     └── operation.json            ← 交易记录
+       ├── skills/ysd-review/data/         ← 每日复盘（待启用）
        ├── IDENTITY.md, MEMORY.md, ...
-       └── skills/, memory/, ...
+       └── memory/, ...
             │
             │  rsync (每天 14:30 自动同步)
             ▼
@@ -57,8 +60,8 @@ location /openclaw-data/ {
 
 | 函数 | 用途 | 示例 |
 |------|------|------|
-| `listDir(path)` | 列出目录文件 | `listDir('data/reviews')` |
-| `fetchJson<T>(path)` | 获取 JSON 文件 | `fetchJson('data/reviews/2026-03-25.json')` |
+| `listDir(path)` | 列出目录文件 | `listDir('skills/ysd-account')` |
+| `fetchJson<T>(path)` | 获取 JSON 文件 | `fetchJson('skills/ysd-account/account.json')` |
 | `fetchText(path)` | 获取文本文件 | `fetchText('MEMORY.md')` |
 
 ### listDir 返回格式
@@ -67,55 +70,55 @@ nginx autoindex json 返回的数组结构：
 
 ```json
 [
-  { "name": "2026-03-25.json", "type": "file", "mtime": "Tue, 25 Mar 2026 12:16:00 GMT", "size": 1879 },
+  { "name": "account.json", "type": "file", "mtime": "Tue, 25 Mar 2026 12:16:00 GMT", "size": 1879 },
   { "name": "subdir", "type": "directory", "mtime": "..." }
 ]
 ```
 
-## 每日复盘数据格式 (`data/reviews/YYYY-MM-DD.json`)
+## 账户数据格式 (`skills/ysd-account/account.json`)
 
 ```json
 {
-  "date": "2026-03-25",
-  "time": "20:00:00",
-  "market_data": {
-    "open": null, "high": null, "low": null,
-    "close": 4.536, "volume": 7080000, "change_pct": 1.27
-  },
-  "trade_plan": "...",
-  "actual_result": "...",
-  "operation": { "action": "hold|buy|sell", "quantity": 0, "price": null },
-  "account": {
-    "cash": 8596.90,
-    "position": 300,
-    "position_value": 1360.80,
-    "total_asset": 9957.70,
-    "unrealized_pnl": -42.30,
-    "unrealized_pnl_pct": -3.01
-  },
-  "good": ["..."],
-  "improve": ["..."],
-  "lessons": ["..."],
-  "next_actions": ["..."],
-  "scores": {
-    "decision_quality": 4,
-    "execution_discipline": 5,
-    "risk_control": 3
+  "available_funds": 8596.90,
+  "total_market_value": 1403.10,
+  "total_assets": 10000.00,
+  "positions": {
+    "510300": {
+      "name": "华泰柏瑞沪深300ETF",
+      "quantity": 300,
+      "avg_cost": 4.677
+    }
   }
 }
 ```
 
+## 交易记录格式 (`skills/ysd-account/operation.json`)
+
+```json
+[
+  {
+    "type": "buy",
+    "stock_code": "510300",
+    "stock_name": "华泰柏瑞沪深300ETF",
+    "price": 4.677,
+    "quantity": 100,
+    "total_amount": 467.70,
+    "timestamp": "2026-03-13 18:43:51"
+  }
+]
+```
+
 ## 前端数据映射 (`ProductBrowse.vue`)
 
-| 展示字段 | 数据来源（最新 review） |
-|----------|------------------------|
-| 总资产 | `account.total_asset` |
-| 可用资金 | `account.cash` |
-| 持仓市值 | `account.position_value` |
-| 持仓数量 | `account.position` |
-| 持仓均价 | `(position_value - unrealized_pnl) / position` |
-| 交易记录 | 所有 `operation.action !== 'hold'` 的 review |
-| 总资产走势 | 每日 `account.total_asset` 构成折线图 |
+| 展示字段 | 数据来源 |
+|----------|----------|
+| 总资产 | `account.json → total_assets` |
+| 可用资金 | `account.json → available_funds` |
+| 持仓市值 | `account.json → total_market_value` |
+| 持仓数量 | `account.json → positions["510300"].quantity` |
+| 持仓均价 | `account.json → positions["510300"].avg_cost` |
+| 交易记录 | `operation.json` 完整数组 |
+| 总资产走势 | 基于 `operation.json` 逐笔推算资产变化曲线 |
 
 ## 扩展方式
 
