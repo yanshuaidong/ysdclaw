@@ -70,6 +70,7 @@
           <div class="card-header">
             <span>总资产走势</span>
             <el-tag size="small" type="info">初始资金 ¥10,000.00</el-tag>
+            <el-tag v-if="chartError" size="small" type="danger">净值曲线加载失败</el-tag>
           </div>
         </template>
         <div ref="chartRef" class="chart-container"></div>
@@ -130,6 +131,7 @@ import {
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { fetchJson } from '../api/openclaw'
+import { fetchEquityCurve } from '../api/simulation'
 
 echarts.use([
   LineChart,
@@ -142,6 +144,7 @@ echarts.use([
 ])
 
 const INITIAL_CAPITAL = 10000
+const TARGET_STOCK_CODE = '510300'
 
 interface AccountData {
   available_funds: number
@@ -160,12 +163,50 @@ interface Operation {
   timestamp: string
 }
 
+interface EquityPoint {
+  date: string
+  total_assets: number
+  cash: number
+  market_value: number
+  position_quantity: number
+  close_price: number
+  nav: number
+}
+
+interface TradeMarker {
+  date: string
+  type: 'buy' | 'sell'
+  timestamp: string
+  stock_code: string
+  stock_name: string
+  price: number
+  quantity: number
+  total_amount: number
+  total_assets_at_marker: number
+}
+
 const loading = ref(true)
 const error = ref('')
+const chartError = ref('')
 const accountData = ref<AccountData | null>(null)
 const operationsData = ref<Operation[]>([])
+const equityPoints = ref<EquityPoint[]>([])
+const tradeMarkers = ref<TradeMarker[]>([])
+
+const lastEquityPoint = computed(() => {
+  if (equityPoints.value.length === 0) return null
+  return equityPoints.value[equityPoints.value.length - 1]
+})
 
 const account = computed(() => {
+  const p = lastEquityPoint.value
+  if (p) {
+    return {
+      available_funds: p.cash,
+      total_market_value: p.market_value,
+      total_assets: p.total_assets,
+    }
+  }
   const a = accountData.value
   if (!a) return { available_funds: 0, total_market_value: 0, total_assets: INITIAL_CAPITAL }
   return {
@@ -218,44 +259,8 @@ const chartRef = ref<HTMLElement | null>(null)
 let chartInstance: echarts.ECharts | null = null
 
 function buildChartData() {
-  const ops = operationsData.value
-  if (ops.length === 0) return []
-
-  const points: { time: string; value: number }[] = []
-  let funds = INITIAL_CAPITAL
-  const positions: Record<string, { quantity: number; avg_cost: number }> = {}
-
-  const calcTotal = () => {
-    let mv = 0
-    for (const code in positions) mv += positions[code].quantity * positions[code].avg_cost
-    return +(funds + mv).toFixed(2)
-  }
-
-  points.push({ time: '初始', value: INITIAL_CAPITAL })
-
-  for (const op of ops) {
-    if (op.type === 'buy') {
-      funds = +(funds - op.total_amount).toFixed(2)
-      if (positions[op.stock_code]) {
-        const p = positions[op.stock_code]
-        const oldTotal = p.avg_cost * p.quantity
-        p.quantity += op.quantity
-        p.avg_cost = +((oldTotal + op.total_amount) / p.quantity).toFixed(4)
-      } else {
-        positions[op.stock_code] = { quantity: op.quantity, avg_cost: op.price }
-      }
-    } else {
-      const p = positions[op.stock_code]
-      if (p) {
-        funds = +(funds + op.total_amount).toFixed(2)
-        p.quantity -= op.quantity
-        if (p.quantity <= 0) delete positions[op.stock_code]
-      }
-    }
-    points.push({ time: op.timestamp.slice(0, 10), value: calcTotal() })
-  }
-
-  return points
+  if (equityPoints.value.length === 0) return []
+  return equityPoints.value.map(p => ({ time: p.date, value: p.total_assets }))
 }
 
 function initChart() {
@@ -266,12 +271,32 @@ function initChart() {
   const data = buildChartData()
   if (data.length === 0) return
 
+  const markersByDate = new Map<string, TradeMarker[]>()
+  for (const m of tradeMarkers.value) {
+    if (!markersByDate.has(m.date)) markersByDate.set(m.date, [])
+    markersByDate.get(m.date)!.push(m)
+  }
+
+  const markPointData = tradeMarkers.value.map(m => ({
+    coord: [m.date, m.total_assets_at_marker],
+    value: m.type === 'buy' ? '买入' : '卖出',
+    itemStyle: { color: m.type === 'buy' ? '#f56c6c' : '#67c23a' },
+  }))
+
   chartInstance.setOption({
     tooltip: {
       trigger: 'axis',
       formatter: (params: any) => {
         const p = params[0]
-        return `${p.axisValue}<br/>总资产: <b>¥${Number(p.value).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</b>`
+        const date = p.axisValue as string
+        const total = Number(p.value)
+        const ms = markersByDate.get(date) || []
+        const tradeLines =
+          ms.length === 0
+            ? ''
+            : '<br/>交易：' + ms.map(m => `${m.type === 'buy' ? '买' : '卖'} ¥${m.price.toFixed(3)} × ${m.quantity} (${m.timestamp.slice(11, 16)})`).join('<br/>')
+
+        return `${date}<br/>总资产: <b>¥${total.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</b>${tradeLines}`
       },
     },
     grid: {
@@ -318,6 +343,11 @@ function initChart() {
           silent: true,
           data: [{ yAxis: INITIAL_CAPITAL, label: { formatter: '初始资金' }, lineStyle: { color: '#e6a23c', type: 'dashed' } }],
         },
+        markPoint: {
+          data: markPointData,
+          symbolSize: 12,
+          label: { formatter: (p: any) => p.value },
+        },
       },
     ],
   })
@@ -330,6 +360,7 @@ function handleResize() {
 async function loadData() {
   loading.value = true
   error.value = ''
+  chartError.value = ''
   try {
     const [acct, ops] = await Promise.all([
       fetchJson<AccountData>('skills/ysd-account/account.json'),
@@ -337,12 +368,26 @@ async function loadData() {
     ])
     accountData.value = acct
     operationsData.value = ops
+
+    const curveOps = ops.filter(o => o.stock_code === TARGET_STOCK_CODE)
+    try {
+      const curve = await fetchEquityCurve({
+        stock_code: TARGET_STOCK_CODE,
+        initial_capital: INITIAL_CAPITAL,
+        operations: curveOps,
+      })
+      equityPoints.value = curve.points
+      tradeMarkers.value = curve.trade_markers
+    } catch (e: any) {
+      chartError.value = e?.message || '净值曲线接口失败'
+    }
   } catch (e: any) {
     error.value = e.message || '加载数据失败'
   } finally {
     loading.value = false
     await nextTick()
-    if (!error.value && operationsData.value.length > 0) {
+    // Ensure chart container is mounted (template is gated by `!loading`)
+    if (!chartError.value && equityPoints.value.length > 0) {
       initChart()
     }
   }
