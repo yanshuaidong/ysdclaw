@@ -1,113 +1,119 @@
 <template>
-  <div class="product-browse">
-    <div class="page-header">
-      <h2>华泰柏瑞沪深300ETF · 模拟交易</h2>
-      <el-tag type="success" effect="dark" size="large">510300</el-tag>
-    </div>
+  <div class="product-browse" v-loading="loading" element-loading-text="加载数据中...">
+    <el-result v-if="error" icon="error" title="数据加载失败" :sub-title="error">
+      <template #extra>
+        <el-button type="primary" @click="loadData">重试</el-button>
+      </template>
+    </el-result>
 
-    <!-- 第一层：情况概览 -->
-    <el-row :gutter="16" class="overview-row">
-      <el-col :span="8">
-        <div class="overview-card primary">
-          <div class="card-label">总资产</div>
-          <div class="card-value">¥ {{ formatMoney(account.total_assets) }}</div>
-          <div class="card-sub">
-            <span :class="profitRateClass">{{ profitRateText }}</span>
+    <el-empty v-else-if="!loading && reviews.length === 0" description="暂无复盘数据" />
+
+    <template v-else-if="!loading">
+      <div class="page-header">
+        <h2>华泰柏瑞沪深300ETF · 模拟交易</h2>
+        <el-tag type="success" effect="dark" size="large">510300</el-tag>
+      </div>
+
+      <!-- 第一层：情况概览 -->
+      <el-row :gutter="16" class="overview-row">
+        <el-col :span="8">
+          <div class="overview-card primary">
+            <div class="card-label">总资产</div>
+            <div class="card-value">¥ {{ formatMoney(account.total_assets) }}</div>
+            <div class="card-sub">
+              <span :class="profitRateClass">{{ profitRateText }}</span>
+            </div>
           </div>
-        </div>
-      </el-col>
-      <el-col :span="8">
-        <div class="overview-card">
-          <div class="card-label">可用资金</div>
-          <div class="card-value">¥ {{ formatMoney(account.available_funds) }}</div>
-          <div class="card-sub">占比 {{ fundRatio }}%</div>
-        </div>
-      </el-col>
-      <el-col :span="8">
-        <div class="overview-card">
-          <div class="card-label">持仓市值</div>
-          <div class="card-value">¥ {{ formatMoney(account.total_market_value) }}</div>
-          <div class="card-sub">占比 {{ marketRatio }}%</div>
-        </div>
-      </el-col>
-    </el-row>
-    <el-row :gutter="16" class="overview-row">
-      <el-col :span="8">
-        <div class="overview-card">
-          <div class="card-label">持仓数量</div>
-          <div class="card-value">{{ position.quantity }} 份</div>
-          <div class="card-sub">{{ position.name }}</div>
-        </div>
-      </el-col>
-      <el-col :span="8">
-        <div class="overview-card">
-          <div class="card-label">持仓均价</div>
-          <div class="card-value">¥ {{ position.avg_cost.toFixed(3) }}</div>
-          <div class="card-sub">成本总额 ¥ {{ formatMoney(position.quantity * position.avg_cost) }}</div>
-        </div>
-      </el-col>
-      <el-col :span="8">
-        <div class="overview-card">
-          <div class="card-label">交易次数</div>
-          <div class="card-value">{{ operations.length }} 笔</div>
-          <div class="card-sub">买入 {{ buyCount }} 笔 / 卖出 {{ sellCount }} 笔</div>
-        </div>
-      </el-col>
-    </el-row>
+        </el-col>
+        <el-col :span="8">
+          <div class="overview-card">
+            <div class="card-label">可用资金</div>
+            <div class="card-value">¥ {{ formatMoney(account.available_funds) }}</div>
+            <div class="card-sub">占比 {{ fundRatio }}%</div>
+          </div>
+        </el-col>
+        <el-col :span="8">
+          <div class="overview-card">
+            <div class="card-label">持仓市值</div>
+            <div class="card-value">¥ {{ formatMoney(account.total_market_value) }}</div>
+            <div class="card-sub">占比 {{ marketRatio }}%</div>
+          </div>
+        </el-col>
+      </el-row>
+      <el-row :gutter="16" class="overview-row">
+        <el-col :span="8">
+          <div class="overview-card">
+            <div class="card-label">持仓数量</div>
+            <div class="card-value">{{ position.quantity }} 份</div>
+            <div class="card-sub">{{ position.name }}</div>
+          </div>
+        </el-col>
+        <el-col :span="8">
+          <div class="overview-card">
+            <div class="card-label">持仓均价</div>
+            <div class="card-value">¥ {{ position.avg_cost.toFixed(3) }}</div>
+            <div class="card-sub">成本总额 ¥ {{ formatMoney(position.quantity * position.avg_cost) }}</div>
+          </div>
+        </el-col>
+        <el-col :span="8">
+          <div class="overview-card">
+            <div class="card-label">交易次数</div>
+            <div class="card-value">{{ operations.length }} 笔</div>
+            <div class="card-sub">买入 {{ buyCount }} 笔 / 卖出 {{ sellCount }} 笔</div>
+          </div>
+        </el-col>
+      </el-row>
 
-    <!-- 第二层：总资产折线图 -->
-    <el-card shadow="never" class="chart-card">
-      <template #header>
-        <div class="card-header">
-          <span>总资产走势</span>
-          <el-tag size="small" type="info">初始资金 ¥10,000.00</el-tag>
-        </div>
-      </template>
-      <div ref="chartRef" class="chart-container"></div>
-    </el-card>
+      <!-- 第二层：总资产折线图 -->
+      <el-card shadow="never" class="chart-card">
+        <template #header>
+          <div class="card-header">
+            <span>总资产走势</span>
+            <el-tag size="small" type="info">初始资金 ¥10,000.00</el-tag>
+          </div>
+        </template>
+        <div ref="chartRef" class="chart-container"></div>
+      </el-card>
 
-    <!-- 第三层：交易列表 -->
-    <el-card shadow="never" class="table-card">
-      <template #header>
-        <div class="card-header">
-          <span>交易记录</span>
-          <el-tag size="small">共 {{ operations.length }} 条</el-tag>
-        </div>
-      </template>
-      <el-table :data="operations" stripe border style="width: 100%">
-        <el-table-column label="时间" prop="timestamp" width="200">
-          <template #default="{ row }">
-            {{ formatTime(row.timestamp) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="方向" prop="type" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.type === 'buy' ? 'danger' : 'success'" effect="dark" size="small">
-              {{ row.type === 'buy' ? '买入' : '卖出' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="代码" prop="stock_code" width="100" align="center" />
-        <el-table-column label="名称" prop="stock_name" />
-        <el-table-column label="价格" prop="price" width="120" align="right">
-          <template #default="{ row }">
-            ¥ {{ row.price.toFixed(3) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="数量" prop="quantity" width="100" align="right">
-          <template #default="{ row }">
-            {{ row.quantity }} 份
-          </template>
-        </el-table-column>
-        <el-table-column label="成交金额" prop="total_amount" width="140" align="right">
-          <template #default="{ row }">
-            <span :class="row.type === 'buy' ? 'text-red' : 'text-green'">
-              ¥ {{ formatMoney(row.total_amount) }}
-            </span>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <!-- 第三层：交易列表 -->
+      <el-card shadow="never" class="table-card">
+        <template #header>
+          <div class="card-header">
+            <span>交易记录</span>
+            <el-tag size="small">共 {{ operations.length }} 条</el-tag>
+          </div>
+        </template>
+        <el-table :data="operations" stripe border style="width: 100%">
+          <el-table-column label="时间" prop="timestamp" width="200" />
+          <el-table-column label="方向" prop="type" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.type === 'buy' ? 'danger' : 'success'" effect="dark" size="small">
+                {{ row.type === 'buy' ? '买入' : '卖出' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="代码" prop="stock_code" width="100" align="center" />
+          <el-table-column label="名称" prop="stock_name" />
+          <el-table-column label="价格" prop="price" width="120" align="right">
+            <template #default="{ row }">
+              ¥ {{ row.price.toFixed(3) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="数量" prop="quantity" width="100" align="right">
+            <template #default="{ row }">
+              {{ row.quantity }} 份
+            </template>
+          </el-table-column>
+          <el-table-column label="成交金额" prop="total_amount" width="140" align="right">
+            <template #default="{ row }">
+              <span :class="row.type === 'buy' ? 'text-red' : 'text-green'">
+                ¥ {{ formatMoney(row.total_amount) }}
+              </span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </template>
   </div>
 </template>
 
@@ -123,8 +129,7 @@ import {
   MarkLineComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import accountData from '../stores/account.json'
-import operationData from '../stores/operation.json'
+import { listDir, fetchJson } from '../api/openclaw'
 
 echarts.use([
   LineChart,
@@ -138,30 +143,93 @@ echarts.use([
 
 const INITIAL_CAPITAL = 10000
 
-const account = accountData as {
-  available_funds: number
-  total_market_value: number
-  total_assets: number
-  positions: Record<string, { name: string; quantity: number; avg_cost: number }>
+interface Review {
+  date: string
+  time: string
+  market_data: {
+    open: number | null
+    high: number | null
+    low: number | null
+    close: number
+    volume: number
+    change_pct: number
+  }
+  operation: {
+    action: string
+    quantity: number
+    price: number | null
+  }
+  account: {
+    cash: number
+    position: number
+    position_value: number
+    total_asset: number
+    unrealized_pnl: number
+    unrealized_pnl_pct: number
+  }
+  trade_plan: string
+  actual_result: string
+  good: string[]
+  improve: string[]
+  lessons: string[]
+  next_actions: string[]
+  scores: {
+    decision_quality: number
+    execution_discipline: number
+    risk_control: number
+  }
 }
 
-const operations = operationData as Array<{
-  type: string
-  stock_code: string
-  stock_name: string
-  price: number
-  quantity: number
-  total_amount: number
-  timestamp: string
-}>
+const loading = ref(true)
+const error = ref('')
+const reviews = ref<Review[]>([])
 
-const position = account.positions['510300']
+const latestReview = computed(() =>
+  reviews.value.length > 0 ? reviews.value[reviews.value.length - 1] : null
+)
 
-const buyCount = computed(() => operations.filter(o => o.type === 'buy').length)
-const sellCount = computed(() => operations.filter(o => o.type === 'sell').length)
+const account = computed(() => {
+  const r = latestReview.value
+  if (!r) return { available_funds: 0, total_market_value: 0, total_assets: INITIAL_CAPITAL }
+  return {
+    available_funds: r.account.cash,
+    total_market_value: r.account.position_value,
+    total_assets: r.account.total_asset,
+  }
+})
+
+const position = computed(() => {
+  const r = latestReview.value
+  if (!r || r.account.position === 0) {
+    return { name: '华泰柏瑞沪深300ETF', quantity: 0, avg_cost: 0 }
+  }
+  const costBasis = r.account.position_value - r.account.unrealized_pnl
+  return {
+    name: '华泰柏瑞沪深300ETF',
+    quantity: r.account.position,
+    avg_cost: costBasis / r.account.position,
+  }
+})
+
+const operations = computed(() =>
+  reviews.value
+    .filter(r => r.operation.action !== 'hold' && r.operation.price != null)
+    .map(r => ({
+      type: r.operation.action,
+      stock_code: '510300',
+      stock_name: '华泰柏瑞沪深300ETF',
+      price: r.operation.price!,
+      quantity: r.operation.quantity,
+      total_amount: r.operation.price! * r.operation.quantity,
+      timestamp: `${r.date} ${r.time}`,
+    }))
+)
+
+const buyCount = computed(() => operations.value.filter(o => o.type === 'buy').length)
+const sellCount = computed(() => operations.value.filter(o => o.type === 'sell').length)
 
 const profitRate = computed(() =>
-  ((account.total_assets - INITIAL_CAPITAL) / INITIAL_CAPITAL) * 100
+  ((account.value.total_assets - INITIAL_CAPITAL) / INITIAL_CAPITAL) * 100
 )
 const profitRateClass = computed(() =>
   profitRate.value > 0 ? 'text-green' : profitRate.value < 0 ? 'text-red' : 'text-neutral'
@@ -171,19 +239,17 @@ const profitRateText = computed(() => {
   return `收益率 ${sign}${profitRate.value.toFixed(2)}%`
 })
 
-const fundRatio = computed(() =>
-  ((account.available_funds / account.total_assets) * 100).toFixed(1)
-)
-const marketRatio = computed(() =>
-  ((account.total_market_value / account.total_assets) * 100).toFixed(1)
-)
+const fundRatio = computed(() => {
+  if (account.value.total_assets === 0) return '0.0'
+  return ((account.value.available_funds / account.value.total_assets) * 100).toFixed(1)
+})
+const marketRatio = computed(() => {
+  if (account.value.total_assets === 0) return '0.0'
+  return ((account.value.total_market_value / account.value.total_assets) * 100).toFixed(1)
+})
 
 function formatMoney(val: number) {
   return val.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function formatTime(ts: string) {
-  return ts
 }
 
 // --- ECharts ---
@@ -193,40 +259,24 @@ let chartInstance: echarts.ECharts | null = null
 function buildChartData() {
   const points: { time: string; value: number }[] = []
 
-  const sortedOps = [...operations].sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  )
-
-  if (sortedOps.length > 0) {
-    const firstDate = new Date(sortedOps[0].timestamp)
-    firstDate.setHours(firstDate.getHours() - 1)
-    points.push({
-      time: firstDate.toLocaleString('zh-CN'),
-      value: INITIAL_CAPITAL,
-    })
+  if (reviews.value.length > 0) {
+    points.push({ time: '初始', value: INITIAL_CAPITAL })
   }
 
-  let runningAssets = INITIAL_CAPITAL
-  for (const op of sortedOps) {
-    points.push({
-      time: new Date(op.timestamp).toLocaleString('zh-CN'),
-      value: runningAssets,
-    })
+  for (const r of reviews.value) {
+    points.push({ time: r.date, value: r.account.total_asset })
   }
-
-  points.push({
-    time: '当前',
-    value: account.total_assets,
-  })
 
   return points
 }
 
 function initChart() {
   if (!chartRef.value) return
+  chartInstance?.dispose()
   chartInstance = echarts.init(chartRef.value)
 
   const data = buildChartData()
+  if (data.length === 0) return
 
   chartInstance.setOption({
     tooltip: {
@@ -289,9 +339,32 @@ function handleResize() {
   chartInstance?.resize()
 }
 
-onMounted(async () => {
-  await nextTick()
-  initChart()
+async function loadData() {
+  loading.value = true
+  error.value = ''
+  try {
+    const files = await listDir('data/reviews')
+    const jsonFiles = files
+      .filter(f => f.type === 'file' && f.name.endsWith('.json'))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    const results = await Promise.all(
+      jsonFiles.map(f => fetchJson<Review>(`data/reviews/${f.name}`))
+    )
+    reviews.value = results
+  } catch (e: any) {
+    error.value = e.message || '加载数据失败'
+  } finally {
+    loading.value = false
+    await nextTick()
+    if (!error.value && reviews.value.length > 0) {
+      initChart()
+    }
+  }
+}
+
+onMounted(() => {
+  loadData()
   window.addEventListener('resize', handleResize)
 })
 
